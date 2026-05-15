@@ -1,52 +1,40 @@
-🛡️ Laboratorio SOC Híbrido: Wazuh + Suricata + Docker
+# 🛡️ Home SOC Lab: Wazuh + Suricata
 
-Este proyecto documenta la implementación de un sistema de monitoreo de seguridad centralizado utilizando una arquitectura de Manager y Agentes distribuidos en una red local.
-🏗️ Arquitectura del Laboratorio
+Este repositorio documenta la implementación de un entorno de monitoreo de seguridad híbrido.
 
-El sistema se divide en dos nodos principales:
+## 🏗️ Arquitectura
+* **Manager (Fedora Server):** Corre en una VM con Docker. Centraliza las alertas.
+* **Sensor (Debian 13):** Hardware real (Core 2 Duo). Corre Suricata y el Agente de Wazuh.
 
-    Nodo de Gestión (Fedora Server en VirtualBox):
 
-        Rol: Manager / SIEM.
 
-        Despliegue: Wazuh centralizado mediante Docker Containers (Wazuh-Manager, Wazuh-Indexer, Wazuh-Dashboard).
+---
 
-        Función: Recibir, procesar y visualizar alertas de toda la red.
+## 🚀 Instalación del Manager (Fedora)
 
-    Nodo Sensor (Debian 13 - Hardware Real):
+Para levantar el stack de Wazuh con Docker en el Fedora:
 
-        Rol: IDS / Agente de Seguridad.
+```bash
 
-        Servicios: Suricata (Detección de intrusiones en red), Wazuh Agent (HIDS), Fail2Ban (Prevención).
-
-        Hardware: Intel Pentium B940 @ 2.00GHz con 8GB RAM.
-
-🚀 Guía de Instalación
-1. El Cerebro: Wazuh Manager (Fedora)
-
-Se utilizó el despliegue de un solo nodo mediante contenedores para facilitar la portabilidad:
-Bash
-
-# Dentro de Fedora Server
 git clone https://github.com/wazuh/wazuh-docker.git -b v4.7.2
 cd wazuh-docker/single-node
 docker-compose up -d
 
-2. El Vigilante: Suricata (Debian)
-
-Instalación y configuración del IDS para inspeccionar el tráfico de la interfaz de red:
+👁️ Instalación del Sensor (Debian)
+1. Instalar Suricata
 Bash
 
-sudo apt install suricata -y
-# Configuración de la red en /etc/suricata/suricata.yaml
-# Actualización de reglas
+sudo apt update && sudo apt install suricata -y
 sudo suricata-update
 
-3. El Vínculo: Integración Suricata -> Wazuh
+2. Vincular con Wazuh
 
-Para que el "cerebro" vea lo que detecta el "vigilante", configuramos el agente de Wazuh en el Debian para que lea los logs JSON de Suricata:
+Para que el agente mande los logs de Suricata al Fedora, editamos el ossec.conf en el Debian:
+Bash
 
-Archivo: /var/ossec/etc/ossec.conf (en el Agente Debian)
+sudo nano /var/ossec/etc/ossec.conf
+
+Y agregamos este bloque dentro de la sección <ossec_config>:
 XML
 
 <localfile>
@@ -54,13 +42,32 @@ XML
   <location>/var/log/suricata/eve.json</location>
 </localfile>
 
-🛠️ Tuning y Personalización
+🛠️ Reglas Personalizadas (Tuning)
 
-Para reducir el ruido en el Dashboard, se implementaron reglas personalizadas en el Manager para silenciar falsos positivos o servicios conocidos (ej: APIs de mensajería como Telegram).
-📈 Beneficios de esta Configuración
+Para evitar el ruido de las alertas de Telegram en el Dashboard, editamos las reglas locales en el Manager:
+XML
 
-    Visibilidad Completa: Monitoreo de procesos, puertos abiertos e intentos de login (SSH/FTP).
+<group name="local,syslog,sshd,">
+  <rule id="100001" level="0">
+    <if_sid>86601</if_sid>
+    <description>Silenciar alertas de Telegram (OpenClaw)</description>
+  </rule>
+</group>
 
-    Detección de Red: Alertas en tiempo real sobre escaneos de puertos (Nmap) o tráfico malicioso gracias a Suricata.
+📝 Notas de Mantenimiento
 
-    Bajo Consumo: Optimización de servicios en hardware antiguo (Core 2 Duo) desactivando servicios innecesarios (como bluetoothd).
+    Permisos en Docker: Si editás archivos dentro del contenedor, recordá aplicar chown wazuh:wazuh para evitar errores de acceso.
+
+    Optimización: Se desactivó el servicio de Bluetooth en el Debian para ahorrar recursos en el Core 2 Duo.
+
+
+---
+
+### ¿Por qué ahora se va a ver bien?
+Fijate que cada comando está envuelto entre:
+* **Arriba:** \` \` \` bash (o xml)
+* **Abajo:** \` \` \`
+
+Eso le dice a GitHub: "Che, esto es código, ponelo en un cuadrito y pintame los comandos de colores".
+
+**Probá pegando este texto tal cual y dale a "Commit changes".** Vas a ver que la prolijidad cambia un 100%. ¿Te animás a probarlo?
