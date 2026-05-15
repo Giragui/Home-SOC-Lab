@@ -1,29 +1,52 @@
-🛡️ Hybrid SOC Laboratory: Wazuh + Suricata
+🛡️ Laboratorio SOC Híbrido: Wazuh + Suricata + Docker
 
-Este repositorio contiene la configuración y documentación de un laboratorio de Seguridad (SOC) híbrido, integrado por un nodo de gestión en Fedora y un nodo de sensorización en Debian.
-🏗️ Arquitectura del Sistema
+Este proyecto documenta la implementación de un sistema de monitoreo de seguridad centralizado utilizando una arquitectura de Manager y Agentes distribuidos en una red local.
+🏗️ Arquitectura del Laboratorio
 
-El laboratorio utiliza un modelo de detección distribuida donde el tráfico es analizado en el borde y centralizado en un gestor para su visualización y respuesta.
-Componentes:
+El sistema se divide en dos nodos principales:
 
-    Manager (Cerebro): * OS: Fedora Linux (VirtualBox VM).
+    Nodo de Gestión (Fedora Server en VirtualBox):
 
-        Software: Wazuh Manager, Indexer y Dashboard corriendo en contenedores Docker.
+        Rol: Manager / SIEM.
 
-        Función: Centralización de logs, motor de reglas y panel de control.
+        Despliegue: Wazuh centralizado mediante Docker Containers (Wazuh-Manager, Wazuh-Indexer, Wazuh-Dashboard).
 
-    Sensor (Vigilante):
+        Función: Recibir, procesar y visualizar alertas de toda la red.
 
-        OS: Debian GNU/Linux 13 (Trixie) - Intel Pentium B940 / 8GB RAM.
+    Nodo Sensor (Debian 13 - Hardware Real):
 
-        Software: Suricata (IDS), Wazuh Agent, Fail2Ban, Caddy.
+        Rol: IDS / Agente de Seguridad.
 
-        Función: Inspección profunda de paquetes (NIDS) y reporte de integridad de archivos.
+        Servicios: Suricata (Detección de intrusiones en red), Wazuh Agent (HIDS), Fail2Ban (Prevención).
 
-🛠️ Configuraciones Destacadas
-1. Integración de Logs
+        Hardware: Intel Pentium B940 @ 2.00GHz con 8GB RAM.
 
-Para que Wazuh procese lo que ve Suricata, configuramos el agente en Debian para leer el archivo eve.json:
+🚀 Guía de Instalación
+1. El Cerebro: Wazuh Manager (Fedora)
+
+Se utilizó el despliegue de un solo nodo mediante contenedores para facilitar la portabilidad:
+Bash
+
+# Dentro de Fedora Server
+git clone https://github.com/wazuh/wazuh-docker.git -b v4.7.2
+cd wazuh-docker/single-node
+docker-compose up -d
+
+2. El Vigilante: Suricata (Debian)
+
+Instalación y configuración del IDS para inspeccionar el tráfico de la interfaz de red:
+Bash
+
+sudo apt install suricata -y
+# Configuración de la red en /etc/suricata/suricata.yaml
+# Actualización de reglas
+sudo suricata-update
+
+3. El Vínculo: Integración Suricata -> Wazuh
+
+Para que el "cerebro" vea lo que detecta el "vigilante", configuramos el agente de Wazuh en el Debian para que lea los logs JSON de Suricata:
+
+Archivo: /var/ossec/etc/ossec.conf (en el Agente Debian)
 XML
 
 <localfile>
@@ -31,37 +54,13 @@ XML
   <location>/var/log/suricata/eve.json</location>
 </localfile>
 
-2. Tuning de Reglas (Reducción de Ruido)
+🛠️ Tuning y Personalización
 
-Un paso crítico fue silenciar las alertas repetitivas de la API de Telegram (utilizada por OpenClaw) que generaban cientos de eventos innecesarios. Se creó una regla personalizada en el Manager:
-XML
+Para reducir el ruido en el Dashboard, se implementaron reglas personalizadas en el Manager para silenciar falsos positivos o servicios conocidos (ej: APIs de mensajería como Telegram).
+📈 Beneficios de esta Configuración
 
-<group name="local,syslog,sshd,">
-  <rule id="100001" level="0">
-    <if_sid>86601</if_sid>
-    <description>Silenciar alertas de Telegram (OpenClaw)</description>
-  </rule>
-</group>
+    Visibilidad Completa: Monitoreo de procesos, puertos abiertos e intentos de login (SSH/FTP).
 
-💡 Lecciones Aprendidas (Troubleshooting)
-Gestión de Archivos en Contenedores Docker
+    Detección de Red: Alertas en tiempo real sobre escaneos de puertos (Nmap) o tráfico malicioso gracias a Suricata.
 
-Al editar reglas directamente en el contenedor del Manager, nos encontramos con errores de Permission Denied. La solución profesional fue:
-
-    Extraer el archivo: docker cp manager:/path/file.xml .
-
-    Editar localmente y devolverlo.
-
-    Corregir permisos: Es vital devolver la propiedad al usuario interno de Wazuh:
-    Bash
-
-    chown wazuh:wazuh /var/ossec/etc/rules/local_rules.xml
-    chmod 660 /var/ossec/etc/rules/local_rules.xml
-
-🚀 Próximos Pasos
-
-    [ ] Configurar Active Response para bloquear IPs automáticamente tras ataques de fuerza bruta en SSH/FTP.
-
-    [ ] Implementar escaneos de vulnerabilidades (SCA) programados.
-
-    [ ] Integrar alertas críticas hacia un bot de Telegram dedicado.
+    Bajo Consumo: Optimización de servicios en hardware antiguo (Core 2 Duo) desactivando servicios innecesarios (como bluetoothd).
