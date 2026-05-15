@@ -20,6 +20,7 @@ Desplegamos Wazuh usando contenedores. El acceso al Dashboard se configuró en e
 ### Docker Compose (Mapeo de Puertos)
 
 ```yaml
+
 services:
   wazuh.dashboard:
     image: wazuh/wazuh-dashboard:4.7.2
