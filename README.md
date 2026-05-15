@@ -1,40 +1,64 @@
-# 🛡️ Home SOC Lab: Wazuh + Suricata
+# 🛡️ Home SOC Lab: Wazuh + Suricata + Fail2Ban
 
-Este repositorio documenta la implementación de un entorno de monitoreo de seguridad híbrido.
+Guía de despliegue de un sistema de detección y respuesta ante intrusiones en un entorno híbrido.
 
-## 🏗️ Arquitectura
-* **Manager (Fedora Server):** Corre en una VM con Docker. Centraliza las alertas.
-* **Sensor (Debian 13):** Hardware real (Core 2 Duo). Corre Suricata y el Agente de Wazuh.
+## 🏗️ Arquitectura del Proyecto
+* **Manager (Fedora Server):** Nodo centralizado en Docker que corre el stack de Wazuh.
+* **Sensor (Debian 13):** Equipo físico (Intel Pentium B940) que actúa como IDS de red y host.
 
 
 
 ---
 
-## 🚀 Instalación del Manager (Fedora)
+## 🚀 1. Configuración del Manager (Fedora)
 
-Para levantar el stack de Wazuh con Docker en el Fedora:
+Utilizamos Docker para el despliegue del Manager. El Dashboard está mapeado al puerto **8443** para el acceso web.
 
-```bash
+### Docker Compose (Resumen de puertos)
+```yaml
+# Fragmento del docker-compose.yml
+services:
+  wazuh.dashboard:
+    image: wazuh/wazuh-dashboard:4.7.2
+    ports:
+      - "8443:5601"
+    environment:
+      - WAZUH_MANAGER_URL=[https://wazuh.manager](https://wazuh.manager)
 
-git clone https://github.com/wazuh/wazuh-docker.git -b v4.7.2
-cd wazuh-docker/single-node
-docker-compose up -d
-
-👁️ Instalación del Sensor (Debian)
-1. Instalar Suricata
+Para levantar el stack:
 Bash
 
-sudo apt update && sudo apt install suricata -y
+docker-compose up -d
+
+👁️ 2. Configuración del Sensor (Debian)
+
+En el nodo Debian instalamos las herramientas de detección y prevención.
+Instalación de Suricata y Fail2Ban
+Bash
+
+sudo apt update
+sudo apt install suricata fail2ban -y
 sudo suricata-update
 
-2. Vincular con Wazuh
+Configuración de Fail2Ban
 
-Para que el agente mande los logs de Suricata al Fedora, editamos el ossec.conf en el Debian:
+Para asegurar que Fail2Ban esté activo en servicios críticos como SSH:
+Bash
+
+sudo systemctl enable fail2ban
+sudo systemctl start fail2ban
+
+🔗 3. Integración con el Dashboard de Wazuh
+
+Para que el nodo Fedora reciba los eventos del Debian, configuramos el agente de Wazuh localmente.
+Monitoreo de Suricata y Fail2Ban
+
+Editamos el archivo de configuración del agente:
 Bash
 
 sudo nano /var/ossec/etc/ossec.conf
 
-Y agregamos este bloque dentro de la sección <ossec_config>:
+Agregamos estas líneas dentro de <ossec_config> para que los logs lleguen al dashboard:
 XML
 
 <localfile>
@@ -42,9 +66,14 @@ XML
   <location>/var/log/suricata/eve.json</location>
 </localfile>
 
-🛠️ Reglas Personalizadas (Tuning)
+<localfile>
+  <log_format>syslog</log_format>
+  <location>/var/log/fail2ban.log</location>
+</localfile>
 
-Para evitar el ruido de las alertas de Telegram en el Dashboard, editamos las reglas locales en el Manager:
+🛠️ Reglas de Tuning Personalizadas
+
+Para evitar el ruido de las alertas de la API de Telegram en el Dashboard, aplicamos esta regla en el Manager:
 XML
 
 <group name="local,syslog,sshd,">
@@ -54,20 +83,8 @@ XML
   </rule>
 </group>
 
-📝 Notas de Mantenimiento
+📝 Notas Técnicas
 
-    Permisos en Docker: Si editás archivos dentro del contenedor, recordá aplicar chown wazuh:wazuh para evitar errores de acceso.
+    Acceso: El dashboard es accesible en https://[IP-FEDORA]:8443.
 
-    Optimización: Se desactivó el servicio de Bluetooth en el Debian para ahorrar recursos en el Core 2 Duo.
-
-
----
-
-### ¿Por qué ahora se va a ver bien?
-Fijate que cada comando está envuelto entre:
-* **Arriba:** \` \` \` bash (o xml)
-* **Abajo:** \` \` \`
-
-Eso le dice a GitHub: "Che, esto es código, ponelo en un cuadrito y pintame los comandos de colores".
-
-**Probá pegando este texto tal cual y dale a "Commit changes".** Vas a ver que la prolijidad cambia un 100%. ¿Te animás a probarlo?
+    Rendimiento: Se optimizó el Debian desactivando servicios como bluetooth.service para priorizar el análisis de tráfico.
